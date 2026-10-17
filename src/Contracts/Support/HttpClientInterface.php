@@ -32,6 +32,11 @@ interface HttpClientInterface
      */
     public function delete(string $baseUrl, string $uri, array $data = [], array $headers = []): Response;
 
+    /**
+     * @throws HttpClientException
+     */
+    public function postMultiPart(string $baseUrl, string $uri, array $files = [], array $data = [], array $headers = []): Response;
+
     public function setProvider(string $provider): HttpClientInterface;
 
     public function setRequestType(string $requestType): HttpClientInterface;

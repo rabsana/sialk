@@ -4,6 +4,7 @@ namespace Rabsana\Sialk\Support;
 
 use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Response;
+use Illuminate\Support\Arr;
 use Rabsana\Sialk\Contracts\Support\HttpClientInterface;
 use Rabsana\Sialk\Exceptions\HttpClientException;
 use Rabsana\Sialk\Services\QuestService;
@@ -38,11 +39,7 @@ class HttpClient implements HttpClientInterface
         try {
             $method = strtolower($method);
 
-            if (! empty($uri)) {
-                $endpoint = rtrim($baseUrl, '/').'/'.ltrim($uri, '/');
-            } else {
-                $endpoint = $baseUrl;
-            }
+            $endpoint = $this->getEndpoint($baseUrl, $uri);
 
             $quest = QuestService::getInstance();
             $quest->setRequestMethod($method)
@@ -107,10 +104,85 @@ class HttpClient implements HttpClientInterface
         return $this->request($baseUrl, 'delete', $uri, $data, $headers);
     }
 
+    public function postMultiPart(string $baseUrl, string $uri, array $files = [], array $data = [], array $headers = []): Response
+    {
+        try {
+            $method = strtolower($method);
+
+            $endpoint = $this->getEndpoint($baseUrl, $uri);
+
+            $requestBody = array_merge(
+                $data,
+                Arr::mapWithKeys($files, function ($value, $key) {
+                    return [$key => '***'];
+                })
+            );
+            $quest = QuestService::getInstance();
+            $quest->setRequestMethod($method)
+                ->setRequestHeaders($headers)
+                ->setRequestType($this->requestType)
+                ->setThirdParty($this->provider)
+                ->setRequestTime(strval(microtime(true) * 10000))
+                ->setRequestBody($requestBody)
+                ->setEndpoint($endpoint);
+
+            $clientInstance = $this->client;
+            foreach($files as $key => $value){
+                $clientInstance = $clientInstance->attach($key, $value);
+            }
+            foreach($data as $key => $value){
+                $clientInstance = $clientInstance->attach($key, $value);
+            }
+
+            /**
+             * @var Response $response
+             */
+            $response = $clientInstance
+                ->withoutVerifying()
+                ->acceptJson()
+                ->withHeaders($headers)
+                ->post(
+                    $endpoint
+                );
+
+            $quest->setReason($response->reason())
+                ->setResponseHeaders($response->headers())
+                ->setResponseBody($response->json() ?? [])
+                ->setResponseStatusCode($response->getStatusCode())
+                ->setResponseTime(strval(microtime(true) * 10000))
+                ->store();
+
+            return $response;
+        }catch (Throwable $exception) {
+            if (isset($quest)) {
+                $quest->setReason($exception->getMessage())
+                    ->setResponseTime(strval(microtime(true) * 10000));
+                $quest->store();
+            }
+
+            throw new HttpClientException($exception->getMessage());
+        }
+    }
+
     public function setProvider(string $provider): HttpClientInterface
     {
         $this->provider = $provider;
 
         return $this;
+    }
+
+    /**
+     * @param string $baseUrl
+     * @param string $uri
+     * @return string
+     */
+    protected function getEndpoint(string $baseUrl, string $uri): string
+    {
+        if (!empty($uri)) {
+            $endpoint = rtrim($baseUrl, '/') . '/' . ltrim($uri, '/');
+        } else {
+            $endpoint = $baseUrl;
+        }
+        return $endpoint;
     }
 }
