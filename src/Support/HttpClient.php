@@ -107,7 +107,7 @@ class HttpClient implements HttpClientInterface
     public function postMultiPart(string $baseUrl, string $uri, array $files = [], array $data = [], array $headers = []): Response
     {
         try {
-            $method = strtolower($method);
+            $method = 'post';
 
             $endpoint = $this->getEndpoint($baseUrl, $uri);
 
